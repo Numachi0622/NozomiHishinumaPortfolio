@@ -40,7 +40,7 @@ public class UIManager : MonoBehaviour
         loseCG.alpha = 0;
         clearCG.alpha = 0;
 
-        //シーンがロードされちゃらまずワイプから始まる
+        //シーンがロードされたらまずワイプから始まる
         FirstWipe();
 
         //少し遅らせてメニューUIのボタンを表示

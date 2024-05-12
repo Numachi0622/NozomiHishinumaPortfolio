@@ -177,7 +177,7 @@ public class HockeyManager : MonoBehaviour
             switchManager.isHit = false;
             switchManager.Switch(switchManager.isHit);
         }
-        //スイッチヒット時のSEwo鳴らす
+        //スイッチヒット時のSEを鳴らす
         audioSource.PlayOneShot(switchSE);
     }
 

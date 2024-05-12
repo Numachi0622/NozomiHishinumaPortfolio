@@ -1,15 +1,15 @@
-using System.CodeDom.Compiler;
+ï»¿using System.CodeDom.Compiler;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
 public class FishGenerator : MonoBehaviour
 {
-    [SerializeField] private GameObject[] fishPrefabs; // ¶¬‚·‚é‹›‚Ìprefab
+    [SerializeField] private GameObject[] fishPrefabs; // ç”Ÿæˆã™ã‚‹é­šã®prefab
     [SerializeField] private int generatePerSeconds = 2;
     [SerializeField] private float generateRange = 5f;
     [SerializeField] private StateManager stateManager;
-    private WaitForSeconds interval = new WaitForSeconds(5); // ¶¬ŠÔŠu
+    private WaitForSeconds interval = new WaitForSeconds(5); // ç”Ÿæˆé–“éš”
     private bool isGenerate = false;
 
     private void Start()

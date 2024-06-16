@@ -1,11 +1,11 @@
-using System.Collections;
+ï»¿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
 public class SubDetection : MonoBehaviour
 {
-    private Vector3 hitPos; // ÚG‚µ‚½À•W
-    [SerializeField] private MainDetection main; // MainDetectionƒNƒ‰ƒX
+    private Vector3 hitPos; // æ¥è§¦ã—ãŸåº§æ¨™
+    [SerializeField] private MainDetection main; // MainDetectionã‚¯ãƒ©ã‚¹
     private void OnTriggerEnter(Collider other)
     {
         if (!other.CompareTag("Main")) return;

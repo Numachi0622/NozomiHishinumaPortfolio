@@ -10,8 +10,8 @@ public class GoalDetector : MonoBehaviour
 
     [SerializeField] CameraController camController;
     [SerializeField] StateManager stateManager;
-    [SerializeField] GameObject[] ballPerticle;
-    [SerializeField] GameObject[] goalPerticle;
+    [SerializeField] GameObject[] ballParticle;
+    [SerializeField] GameObject[] goalParticle;
     [SerializeField] AudioClip whistle;
 
     private void Start()
@@ -24,13 +24,13 @@ public class GoalDetector : MonoBehaviour
         {
             stateManager.GoToFinishState();
             camController.ChangeCam();
-            foreach (var per in ballPerticle)
+            foreach (var par in ballParticle)
             {
-                per.SetActive(false);
+                par.SetActive(false);
             }
-            foreach(var per in goalPerticle)
+            foreach(var par in goalParticle)
             {
-                per.SetActive(true);
+                par.SetActive(true);
             }
             audio.PlayOneShot(whistle);
         }

@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 
 public class AddTaskForTutorial : AddTask
 {
@@ -38,3 +38,5 @@ public class AddTaskForTutorial : AddTask
         if(!tutorialEnemy.activeSelf) tutorialEnemy.SetActive(true);
     }
 }
+
+//テストコメント

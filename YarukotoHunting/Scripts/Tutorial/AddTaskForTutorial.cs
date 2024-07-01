@@ -38,5 +38,3 @@ public class AddTaskForTutorial : AddTask
         if(!tutorialEnemy.activeSelf) tutorialEnemy.SetActive(true);
     }
 }
-
-//テストコメント

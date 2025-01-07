@@ -1,0 +1,88 @@
+#pragma kernel CalcInput
+
+#define THREAD_NUM 256
+#define UPDATE_DIST_MIN 0.01
+
+struct Trail
+{
+    int currentNodeIdx;
+    float elapsedTime;
+    float lineDensity;
+    float noiseStrength;
+};
+
+struct Input
+{
+    float3 position;
+};
+
+struct Node
+{
+    float updatedTime;
+    float3 position;
+    float life;
+};
+
+int _InstanceCount;
+int _NodeNumPerTrail;
+float _UpdatedTime;
+float _NodeLifeTime;
+
+RWStructuredBuffer<Trail> _TrailBuffer;
+StructuredBuffer<Input> _InputBuffer;
+RWStructuredBuffer<Node> _NodeBuffer;
+
+Node getNode(int trailIdx, int nodeIdx)
+{
+    nodeIdx %= _NodeNumPerTrail;
+    // 全体のNodeBufferの中のインデックスを取得
+    int nodeBufIdx = trailIdx * _NodeNumPerTrail + nodeIdx;
+    return _NodeBuffer[nodeBufIdx];
+}
+
+void setNode(Node node, int trailIdx, int nodeIdx)
+{
+    nodeIdx %= _NodeNumPerTrail;
+    // 全体のNodeBufferの中のインデックスを取得
+    int nodeBufIdx = trailIdx * _NodeNumPerTrail + nodeIdx;
+    _NodeBuffer[nodeBufIdx] = node;
+}
+
+[numthreads(THREAD_NUM, 1, 1)]
+void CalcInput(uint3 dTId : SV_DispatchThreadID)
+{
+    const unsigned int t_id = dTId.x;
+    if(t_id >= _InstanceCount) return;
+    
+    Trail trail = _TrailBuffer[t_id];
+    Input input =  _InputBuffer[t_id];
+    int currnetNodeIdx = trail.currentNodeIdx;
+    
+    bool isUpdate = true;
+    if(currnetNodeIdx >= 0)
+    {
+        Node node = getNode(t_id, currnetNodeIdx);
+        float dist = distance(node.position, input.position);
+        isUpdate = dist > UPDATE_DIST_MIN;
+    }
+    
+    if(isUpdate)
+    {
+        // TrailBufferを更新
+        // currentNodeIdxを(0, _NodeNumPerTrail - 1)の範囲で制御する
+        currnetNodeIdx++;
+        currnetNodeIdx %= _NodeNumPerTrail;
+        trail.currentNodeIdx = currnetNodeIdx;
+        trail.elapsedTime = _UpdatedTime;
+        trail.noiseStrength = _TrailBuffer[t_id].noiseStrength;
+        trail.lineDensity = _TrailBuffer[t_id].lineDensity;
+        _TrailBuffer[t_id] = trail;
+        
+        // NodeBufferを更新
+        Node node;
+        node.position = input.position;
+        node.updatedTime = _UpdatedTime;
+        node.life = _NodeLifeTime;
+        setNode(node, t_id, currnetNodeIdx);
+    }
+}

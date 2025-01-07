@@ -1,0 +1,23 @@
+#pragma kernel CSMain
+
+#define THRAD_NUM 8
+
+struct MeshData
+{
+    float3 position;
+    float3 normal;
+};
+
+RWTexture2D<float4> _OutPosition;
+RWTexture2D<float4> _OutNormal;
+StructuredBuffer<MeshData> _MeshDataBuffer;
+int _VertCount;
+
+[numthreads(THRAD_NUM,THRAD_NUM,1)]
+void CSMain (uint3 dTId : SV_DispatchThreadID)
+{
+    uint idx = dTId.y * _VertCount + dTId.x;
+    MeshData meshData = _MeshDataBuffer[idx];
+    _OutPosition[dTId.xy] = float4(meshData.position, 1.0);
+    _OutNormal[dTId.xy] = float4(meshData.normal, 1.0);
+}

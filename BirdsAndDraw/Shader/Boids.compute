@@ -1,0 +1,215 @@
+#pragma kernel Force
+#pragma kernel Integrate
+#pragma kernel UpdateInput
+
+struct BoidData
+{
+    float3 position;
+    float3 velocity;
+};
+
+struct Input
+{
+    float3 position;
+};
+
+// スレッドグループのスレッドサイズ
+// 1グループに含まれるスレッド数
+#define THREAD_NUM 256
+
+// Boidデータのバッファ
+StructuredBuffer<BoidData> _BoidDataBufferRead;
+RWStructuredBuffer<BoidData> _BoidDataBufferWrite;
+
+// 操舵力のバッファ
+StructuredBuffer<float3> _BoidForceBufferRead;
+RWStructuredBuffer<float3> _BoidForceBufferWrite;
+
+// Trail用の入力バッファ
+RWStructuredBuffer<Input> _InputBuffer;
+
+int _InstanceCount;
+
+float _CohesionNeighborhoodRadius;
+float _AlignmentNeighborhoodRadius;
+float _SeparateNeighborhoodRadius;
+
+float _MaxSpeed;
+float _MaxSteerForce;
+
+float _CohesionWeight;
+float _AlignmentWeight;
+float _SeparateWeight;
+float _AvoidWallWeight;
+
+float4 _WallCenter;
+float4 _WallSize;
+
+float _DeltaTime;
+
+groupshared BoidData boid_data[THREAD_NUM];
+
+// ベクトルの大きさを制御する
+float3 limit(float3 vec, float max)
+{
+    float length = sqrt(dot(vec, vec));
+    return length > max && length > 0 ? vec.xyz * (max / length) : vec.xyz;
+}
+
+// 壁に触れたときの逆向きの力を返す
+float3 avoidWall(float3 pos)
+{
+    float3 center = _WallCenter.xyz;
+    float3 size = _WallSize.xyz;
+    float3 acc = float3(0, 0, 0);
+
+    acc.x = pos.x < center.x - size.x * 0.5 ? acc.x + 1.0 : acc.x;
+    acc.x = pos.x > center.x + size.x * 0.5 ? acc.x - 1.0 : acc.x;
+
+    acc.y = pos.y < center.y - size.y * 0.5 ? acc.y + 1.0 : acc.y;
+    acc.y = pos.y > center.y + size.y * 0.5 ? acc.y - 1.0 : acc.y;
+
+    acc.z = pos.z < center.z - size.z * 0.5 ? acc.z + 1.0 : acc.z;
+    acc.z = pos.z > center.z + size.z * 0.5 ? acc.z - 1.0 : acc.z;
+
+    return acc;
+}
+
+// 操舵力の計算
+[numthreads(THREAD_NUM, 1, 1)]
+void Force(
+    uint3 dTId : SV_DispatchThreadID, // スレッド全体の固有ID
+    uint3 gId : SV_GroupID, // グループのID
+    uint3 gTId : SV_GroupThreadID, // グループ内スレッドID
+    uint gIdx : SV_GroupIndex) // SV_GroupThreadIDを一次元にしたもの (0 - 255) )
+{
+    // 自身のIDを取得
+    const unsigned int p_id = dTId.x;
+    float3 p_pos = _BoidDataBufferRead[p_id].position;
+    float3 p_vel = _BoidDataBufferRead[p_id].velocity;
+
+    float3 force = float3(0, 0, 0);
+
+    float3 sepPosSum = float3(0, 0, 0);
+    int sepCount = 0;
+
+    float3 aliVelSum = float3(0, 0, 0);
+    int aliCount = 0;
+
+    float3 cohPosSum = float3(0, 0, 0);
+    int cohCount = 0;
+
+    // グループ数分実行する
+    for(uint block_id = 0; block_id < (uint)_InstanceCount; block_id += THREAD_NUM)
+    {
+        // THREAD_NUM分のBoidDataをシェアードメモリに格納
+        boid_data[gIdx] = _BoidDataBufferRead[block_id + gIdx];
+        GroupMemoryBarrierWithGroupSync();
+
+        // 他の個体との計算
+        for(int tile_id = 0; tile_id < THREAD_NUM; tile_id++)
+        {
+            float3 n_pos = boid_data[tile_id].position;
+            float3 n_vel = boid_data[tile_id].velocity;
+
+            // 自身と他の個体との距離を計算
+            float3 diff = p_pos - n_pos;
+            float dist = sqrt(dot(diff, diff));
+
+            // 分離（Separate）
+            if(dist > 0.0 && dist <= _SeparateNeighborhoodRadius)
+            {
+                // 他の個体の位置から自身へ向かうベクトル
+                float3 repulse = normalize(p_pos - n_pos);
+
+                // 距離が遠いほど影響を小さく
+                repulse /= dist;
+                sepPosSum += repulse;
+                sepCount++;
+            }
+
+            // 整列（Alignment）
+            if(dist > 0.0 && dist <= _AlignmentNeighborhoodRadius)
+            {
+                aliVelSum += n_vel;
+                aliCount++;
+            }
+
+            // 結合（Cohesion）
+            if(dist > 0.0 && dist <= _CohesionNeighborhoodRadius)
+            {
+                cohPosSum += n_pos;
+                cohCount++;
+            }
+        }
+        GroupMemoryBarrierWithGroupSync();
+    }
+
+    // 操舵力（分離）
+    float3 sepTeer = float3(0, 0, 0);
+    if(sepCount > 0)
+    {
+        sepTeer = sepPosSum / (float)sepCount;
+        sepTeer = normalize(sepTeer) * _MaxSpeed;
+        sepTeer = sepTeer - p_vel;
+        sepTeer = limit(sepTeer, _MaxSteerForce);
+    }
+
+    // 操舵力（整列）
+    float3 aliSteer = float3(0, 0, 0);
+    if(aliCount > 0)
+    {
+        aliSteer = aliVelSum / (float)aliCount;
+        aliSteer = normalize(aliSteer) * _MaxSpeed;
+        aliSteer = aliSteer - p_vel;
+        aliSteer = limit(aliSteer, _MaxSteerForce);
+    }
+
+    // 操舵力（結合）
+    float cohSteer = float3(0, 0, 0);
+    if(cohCount > 0)
+    {
+        cohPosSum = cohPosSum / (float)cohCount;
+        cohSteer = cohPosSum - p_pos;
+        cohSteer = normalize(cohSteer) * _MaxSpeed;
+        cohSteer = cohSteer - p_vel;
+        cohSteer = limit(cohSteer, _MaxSteerForce);
+    }
+
+    force += aliSteer * _AlignmentWeight;
+    force += cohSteer * _CohesionWeight;
+    force += sepTeer * _SeparateWeight;
+    _BoidForceBufferWrite[p_id] = force;
+}
+
+// 速度と位置の計算
+[numthreads(THREAD_NUM, 1, 1)]
+void Integrate(uint dTId : SV_DispatchThreadID)
+{
+    const unsigned int p_id = (int)dTId.x;
+    if(p_id >= _InstanceCount) return;
+    BoidData boid = _BoidDataBufferWrite[p_id];
+    float3 force = _BoidForceBufferRead[p_id];
+
+    // 壁に近づいたら反発する
+    force += avoidWall(boid.position) * _AvoidWallWeight;
+
+    boid.velocity += force * _DeltaTime;
+    boid.velocity = limit(boid.velocity, _MaxSpeed);
+    boid.position += boid.velocity * _DeltaTime;
+
+    _BoidDataBufferWrite[p_id] = boid;
+}
+
+float _Time;
+// Trail用に座標を入力
+[numthreads(THREAD_NUM, 1, 1)]
+void UpdateInput(uint dTId : SV_DispatchThreadID)
+{
+    const unsigned int p_id = (int)dTId.x;
+    if(p_id >= _InstanceCount) return;
+
+    Input input = _InputBuffer[p_id];
+    input.position = _BoidDataBufferRead[p_id].position;
+    _InputBuffer[p_id] = input;
+}
